@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 from scipy.io import loadmat
 import matplotlib.pyplot as plt
 
-# %% functions
+# functions
 # generate a data batch for training/testing the model
 # Return a total of `num` random samples and labels.
 def next_batch(num, data, labels):
@@ -28,7 +28,7 @@ def plot_fnc(fnc_mat, save=''):
     if save:
         plt.savefig(save, dpi=300)
 
-# %% constants
+# constants
 outpath = '../../results/zfu_data_analysis/sfnc/'
 
 # image parameters
@@ -59,48 +59,8 @@ pool3_fmaps = conv2_fmaps
 n_fc1 = 64
 n_outputs = 2
 
-# %% define the graph
-# reset
-tf.reset_default_graph()
 
-with tf.name_scope("inputs"):
-    X = tf.placeholder(tf.float32, shape=[None, n_inputs], name="X")
-    X_reshaped = tf.reshape(X, shape=[-1, height, width, channels])
-    y = tf.placeholder(tf.int32, name="y")
-
-conv1 = tf.layers.conv2d(X_reshaped, filters=conv1_fmaps, kernel_size=conv1_ksize,
-                         strides=conv1_stride, padding=conv1_pad,
-                         activation=tf.nn.relu, name="conv1")
-conv2 = tf.layers.conv2d(conv1, filters=conv2_fmaps, kernel_size=conv2_ksize,
-                         strides=conv2_stride, padding=conv2_pad,
-                         activation=tf.nn.relu, name="conv2")
-
-with tf.name_scope("pool3"):
-    pool3 = tf.nn.max_pool(conv2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="VALID")
-    pool3_flat = tf.reshape(pool3, shape=[-1, int(np.prod(pool3.shape[1:4]))])
-
-with tf.name_scope("fc1"):
-    fc1 = tf.layers.dense(pool3_flat, n_fc1, activation=tf.nn.relu, name="fc1")
-
-with tf.name_scope("output"):
-    logits = tf.layers.dense(fc1, n_outputs, name="output")
-    Y_proba = tf.nn.softmax(logits, name="Y_proba")
-
-with tf.name_scope("train"):
-    xentropy = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=y)
-    loss = tf.reduce_mean(xentropy)
-    optimizer = tf.train.AdamOptimizer()
-    training_op = optimizer.minimize(loss)
-
-with tf.name_scope("eval"):
-    correct = tf.nn.in_top_k(logits, y, 1)
-    accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
-
-with tf.name_scope("init_and_save"):
-    init = tf.global_variables_initializer()
-    saver = tf.train.Saver()
-
-# %% execute
+# load data
 u_data = np.ndfromtxt('../../results/meta_314_subjects.csv', delimiter=',', 
                       dtype=[(str,80),(str,80),float,float])
 labels = u_data['f3']-1
@@ -134,14 +94,49 @@ for j in range(10):
     epochs_without_progress = 0
     max_epochs_without_progress = 10
 
+    # define the graph
+    tf.reset_default_graph()
+
+    with tf.name_scope("inputs"):
+        X = tf.placeholder(tf.float32, shape=[None, n_inputs], name="X")
+        X_reshaped = tf.reshape(X, shape=[-1, height, width, channels])
+        y = tf.placeholder(tf.int32, name="y")
+    
+    conv1 = tf.layers.conv2d(X_reshaped, filters=conv1_fmaps, kernel_size=conv1_ksize,
+                             strides=conv1_stride, padding=conv1_pad,
+                             activation=tf.nn.relu, name="conv1")
+    conv2 = tf.layers.conv2d(conv1, filters=conv2_fmaps, kernel_size=conv2_ksize,
+                             strides=conv2_stride, padding=conv2_pad,
+                             activation=tf.nn.relu, name="conv2")
+    
+    with tf.name_scope("pool3"):
+        pool3 = tf.nn.max_pool(conv2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="VALID")
+        pool3_flat = tf.reshape(pool3, shape=[-1, int(np.prod(pool3.shape[1:4]))])
+    
+    with tf.name_scope("fc1"):
+        fc1 = tf.layers.dense(pool3_flat, n_fc1, activation=tf.nn.relu, name="fc1")
+    
+    with tf.name_scope("output"):
+        logits = tf.layers.dense(fc1, n_outputs, name="output")
+        Y_proba = tf.nn.softmax(logits, name="Y_proba")
+    
+    with tf.name_scope("train"):
+        xentropy = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=y)
+        loss = tf.reduce_mean(xentropy)
+        optimizer = tf.train.AdamOptimizer()
+        training_op = optimizer.minimize(loss)
+    
+    with tf.name_scope("eval"):
+        correct = tf.nn.in_top_k(logits, y, 1)
+        accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
+    
+    with tf.name_scope("init_and_save"):
+        init = tf.global_variables_initializer()
+        saver = tf.train.Saver()
+
+    # experiment
     with tf.Session(config=config) as sess:
-        try:
-            # load saved model if exists
-            saver.restore(sess, outpath+"/cnn/cnn_model"+str(j))
-        except:
-            init.run()
-#        init.run()
-        
+        init.run()
         for epoch in range(n_epochs):
             for iteration in range(len(X_train) // batch_size):
                 X_batch, y_batch = next_batch(batch_size, X_train, y_train)
@@ -155,7 +150,7 @@ for j in range(10):
 #            accuracy_test = accuracy.eval(feed_dict={X: X_batch, y: y_batch})
             
             if loss_val < best_loss:
-                save_path = saver.save(sess, outpath+"/cnn/cnn_model"+str(j))
+#                save_path = saver.save(sess, outpath+"/cnn/cnn_model"+str(j))
                 best_loss = loss_val
             else:
                 epochs_without_progress += 1
